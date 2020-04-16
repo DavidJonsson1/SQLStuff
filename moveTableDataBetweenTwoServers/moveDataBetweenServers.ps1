@@ -1,38 +1,65 @@
-#if you like to force TLS 1.2 for your connection to Azure
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 ##=============
 # Functions
 ##=============
-function GetSourceData {
+function GetConnectionString{
     Param(  
         [string]$SQLServer,
         [string]$DBName,
-		[string]$TableName,
         [string]$SqlLogin,
         [string]$Password
+        )
+
+    if ($SQLServer -contains "database.windows.net") {
+        $isAzure = $true
+    }
+
+    if ($SqlLogin -eq "WinAuth") {
+        $WinAuth = $true
+    }
+
+
+    ##Azure
+    if ($isAzure -eq $true) {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $connectionString = "Data Source=tcp:$SQLServer;Initial Catalog=$DBName;User Id=$SqlLogin;Password=$Password;Current Language=us_english;Encrypt=True;trustServerCertificate=false"
+    }
+    else {
+        if ($WinAuth -eq $true) {
+        $connectionString = "Data Source=$SQLServer;Initial Catalog=$DBName;Integrated Security = SSPI"
+        } else {
+        $connectionString = "Data Source=$SQLServer;Initial Catalog=$DBName;User Id=$SqlLogin;Password=$Password"
+        }
+    }
+
+return $connectionString
+}
+
+function GetSourceData {
+    Param(  
+        [string]$connectionString,
+		[string]$TableName
     )  
 
-$Src_SqlQuery = "select * from $TableName"
+$SqlQuery = "select * from $TableName"
 
-$Src_SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
 
 ##Azure Connection string
-$Src_SqlConnection.ConnectionString = "Data Source=tcp:$SQLServer;Initial Catalog=$DBName;User Id=$SqlLogin;Password=$Password;Current Language=us_english;Encrypt=True;trustServerCertificate=false"
+$SqlConnection.ConnectionString = $connectionString
 
-write-host "Data Source=tcp:$SQLServer;Initial Catalog=$DBName;User Id=$SqlLogin;Password=******;Current Language=us_english;Encrypt=True;trustServerCertificate=false"
 ##Copy data to DataSet
 $SqlCommand = New-Object System.Data.SqlClient.SqlCommand
-$SqlCommand.CommandText = $Src_SqlQuery
-$SqlCommand.Connection = $Src_SqlConnection
+$SqlCommand.CommandText = $SqlQuery
+$SqlCommand.Connection = $SqlConnection
 
 $SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter
 $SqlAdapter.SelectCommand = $SqlCommand
-$Src_SqlConnection.Open();
+$SqlConnection.Open();
 $DataSet = New-Object System.Data.DataSet
 $SqlAdapter.Fill($DataSet) | Out-Null
 
 #finally
-$Src_SqlConnection.Close();$Src_SqlConnection.Dispose()
+$SqlConnection.Close();$SqlConnection.Dispose()
 
 #return Dataset
 Return $DataSet;
@@ -41,45 +68,39 @@ Return $DataSet;
 
 function ExecuteNonQuery {
     Param(  
-        [string]$SQLServer,
-        [string]$DBName,
-        [string]$SqlLogin,
-        [string]$Password,
+        [string]$ConnectionString,
         [string]$CommandText
     )  
 
 ##Truncate stage table
-$Target_SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
 
 ##OnPrem connection string
-$Target_SqlConnection.ConnectionString ="Data Source=$SQLServer;User Id=$SqlLogin;Password=$Password;Initial Catalog=$DBName;"
-$Target_SqlConnection.Open();
+$SqlConnection.ConnectionString = $ConnectionString
+$SqlConnection.Open();
 $SqlCommand = New-Object System.Data.SqlClient.SqlCommand
 $SqlCommand.CommandText = $CommandText;
-$SqlCommand.Connection = $Target_SqlConnection;
+$SqlCommand.Connection = $SqlConnection;
 $SqlCommand.ExecuteNonQuery();
-$Target_SqlConnection.Close();
-$Target_SqlConnection.Dispose();
+$SqlConnection.Close();
+$SqlConnection.Dispose();
 $SqlCommand.Dispose();
 }
 
 function BulkCopyToTarget {
     Param(  
-        [string] $SQLServer,
-        [string] $DBName,
+        [string] $ConnectionString,
         [string] $TableName,
-        [string] $SqlLogin,
-        [string] $Password,
         [System.Data.DataSet] $DataSet
     )  
 
 ##bulk copy
-$Target_SqlConnection = New-Object System.Data.SqlClient.SqlConnection
-$Target_SqlConnection.ConnectionString ="Data Source=$SQLServer;User Id=$SqlLogin;Password=$Password;Initial Catalog=$DBName;"
-$SqlBulkCopy = New-Object Data.SqlClient.SqlBulkCopy($Target_SqlConnection.ConnectionString, [System.Data.SqlClient.SqlBulkCopyOptions]::TableLock)
+$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+$SqlConnection.ConnectionString = $ConnectionString
+$SqlBulkCopy = New-Object Data.SqlClient.SqlBulkCopy($SqlConnection.ConnectionString, [System.Data.SqlClient.SqlBulkCopyOptions]::TableLock)
 $SqlBulkCopy.DestinationTableName = $TableName
 $SqlBulkCopy.WriteToServer($DataSet.Tables[0])
-$Target_SqlConnection.Close()
+$SqlConnection.Close()
 
 $SqlBulkCopy.Close(); $SqlBulkCopy.Dispose() 
 $DataSet.Dispose()
@@ -216,19 +237,22 @@ try
     $Target_SqlLogin = $ini["Target"].SqlLogin
     $Target_SqlPassword = $ini["Target"].SqlPassword
 
+    $srcConnectionString = GetConnectionString -SQLServer $Src_SQLServer -DBName $Src_DBName -SqlLogin $Src_SqlLogin -Password $Src_SqlPassword
+    $targetConnectionString = GetConnectionString -SQLServer $Target_SQLServer -DBName $Target_DBName -SqlLogin $Target_SqlLogin -Password $Target_SqlPassword
+
     #Get the Source Data
     write-host "Getting Source data..."
-    $DataSet = GetSourceData -SQLServer "$Src_SQLServer" -DBName "$Src_DBName" -TableName "$Src_TableName" -SqlLogin "$Src_SqlLogin" -Password "$Src_SqlPassword"
+    $DataSet = GetSourceData -ConnectionString $srcConnectionString -TableName "$Src_TableName"
     write-host "Getting Source data. Done!"
 
     #Truncate the Target table
     write-host "Delete Target data..."
-    ExecuteNonQuery -SQLServer "$Target_SQLServer" -DBName "$Target_DBName" -SqlLogin "$Target_SqlLogin" -Password "$Target_SqlPassword" -CommandText "DELETE FROM $Target_TableName"
+    ExecuteNonQuery -ConnectionString $targetConnectionString -CommandText "TRUNCATE TABLE $Target_TableName"
     write-host "Delete Target data. Done!"
 
     #Fill Target with new data
     write-host "Insert Source data to Target ..."
-    BulkCopyToTarget -SQLServer "$Target_SQLServer" -DBName "$Target_DBName" -TableName "$Target_TableName" -SqlLogin "$Target_SqlLogin" -Password "$Target_SqlPassword" -DataSet $DataSet
+    BulkCopyToTarget -ConnectionString  $targetConnectionString -TableName "$Target_TableName" -DataSet $DataSet
     write-host "Insert Source data to Target. Done!"
 
     exit 0
