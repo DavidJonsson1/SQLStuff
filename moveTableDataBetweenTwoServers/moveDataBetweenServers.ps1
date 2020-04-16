@@ -1,6 +1,26 @@
 ##=============
 # Functions
 ##=============
+function init{
+
+    #Get settings.ini
+    $ini = $null
+    $ini = Get-IniContent -FilePath "$scriptPath\settings.ini"
+    $global:Src_SQLServer = $ini["Source"].Server
+    $global:Src_DBName = $ini["Source"].Database
+    $global:Src_TableName = $ini["Source"].TableName
+    $global:Src_SqlLogin = $ini["Source"].SqlLogin
+    $global:Src_SqlPassword = $ini["Source"].SqlPassword
+    $global:Target_SQLServer = $ini["Target"].Server
+    $global:Target_DBName = $ini["Target"].Database
+    $global:Target_TableName = $ini["Target"].TableName
+    $global:Target_SqlLogin = $ini["Target"].SqlLogin
+    $global:Target_SqlPassword = $ini["Target"].SqlPassword
+
+    $global:srcConnectionString = GetConnectionString -SQLServer $Src_SQLServer -DBName $Src_DBName -SqlLogin $Src_SqlLogin -Password $Src_SqlPassword
+    $global:targetConnectionString = GetConnectionString -SQLServer $Target_SQLServer -DBName $Target_DBName -SqlLogin $Target_SqlLogin -Password $Target_SqlPassword
+
+}
 function GetConnectionString{
     Param(  
         [string]$SQLServer,
@@ -222,22 +242,8 @@ Set-Location $scriptPath
 try
 {
 
-    #Get settings.ini
-    $ini = $null
-    $ini = Get-IniContent -FilePath "$scriptPath\settings.ini"
-    $Src_SQLServer = $ini["Source"].Server
-    $Src_DBName = $ini["Source"].Database
-    $Src_TableName = $ini["Source"].TableName
-    $Src_SqlLogin = $ini["Source"].SqlLogin
-    $Src_SqlPassword = $ini["Source"].SqlPassword
-    $Target_SQLServer = $ini["Target"].Server
-    $Target_DBName = $ini["Target"].Database
-    $Target_TableName = $ini["Target"].TableName
-    $Target_SqlLogin = $ini["Target"].SqlLogin
-    $Target_SqlPassword = $ini["Target"].SqlPassword
-
-    $srcConnectionString = GetConnectionString -SQLServer $Src_SQLServer -DBName $Src_DBName -SqlLogin $Src_SqlLogin -Password $Src_SqlPassword
-    $targetConnectionString = GetConnectionString -SQLServer $Target_SQLServer -DBName $Target_DBName -SqlLogin $Target_SqlLogin -Password $Target_SqlPassword
+    #init variables & connection string
+    init
 
     #Get the Source Data
     write-host "Getting Source data..."
