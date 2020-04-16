@@ -20,7 +20,6 @@ function GetConnectionString{
 
     ##Azure
     if ($isAzure -eq $true) {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $connectionString = "Data Source=tcp:$SQLServer;Initial Catalog=$DBName;User Id=$SqlLogin;Password=$Password;Current Language=us_english;Encrypt=True;trustServerCertificate=false"
     }
     else {
@@ -37,7 +36,7 @@ return $connectionString
 function GetSourceData {
     Param(  
         [string]$connectionString,
-		[string]$TableName
+        [string]$TableName
     )  
 
 $SqlQuery = "select * from $TableName"
@@ -228,12 +227,12 @@ try
     $ini = Get-IniContent -FilePath "$scriptPath\settings.ini"
     $Src_SQLServer = $ini["Source"].Server
     $Src_DBName = $ini["Source"].Database
-	$Src_TableName = $ini["Source"].TableName
+....$Src_TableName = $ini["Source"].TableName
     $Src_SqlLogin = $ini["Source"].SqlLogin
     $Src_SqlPassword = $ini["Source"].SqlPassword
     $Target_SQLServer = $ini["Target"].Server
     $Target_DBName = $ini["Target"].Database
-	$Target_TableName = $ini["Target"].TableName
+....$Target_TableName = $ini["Target"].TableName
     $Target_SqlLogin = $ini["Target"].SqlLogin
     $Target_SqlPassword = $ini["Target"].SqlPassword
 
@@ -260,7 +259,7 @@ try
 catch [Exception]
 {
     $ErrorMessage = $_.Exception.Message
-	Write-Error "$ErrorMessage"
+....Write-Error "$ErrorMessage"
     exit 1
 }
 finally
