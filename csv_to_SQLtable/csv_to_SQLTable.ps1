@@ -293,7 +293,7 @@ try
     $dataset = New-Object System.Data.DataSet
     $dataset.Tables.Add($table)
 
-    BulkCopyToTarget -ConnectionString $targetConnectionString -TableName "[dbo].[person_Info]" -DataSet $dataset
+    BulkCopyToTarget -ConnectionString $targetConnectionString -TableName $Target_TableName -DataSet $dataset
 
     write-host "Done!"
 }
